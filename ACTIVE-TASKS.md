@@ -4,7 +4,7 @@ This file tracks current and background tasks. Update it as you start new work o
 
 ## Current Focus
 
-**None** - Update this when starting a task
+**[simde-library](tasks/active/simde-library-task.md)
 
 <!-- Example:
 **[cmake-refactor](tasks/active/cmake-refactor.md)** - Priority 1

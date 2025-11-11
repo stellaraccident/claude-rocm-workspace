@@ -37,6 +37,37 @@ As a build infra team member, typical work involves:
 - Out-of-tree builds are standard practice
 - Multiple build configurations (Release, Debug, RelWithDebInfo) often maintained simultaneously
 
+How we build depends on what kind of task we are doing:
+
+#### Developing Build Infra
+
+Good for making changes to the build infra when we aren't expecting to need to do C++ debugging.
+
+1. CMake configure:
+
+```
+cmake -B /develop/therock-build -S /develop/therock -GNinja -DTHEROCK_AMDGPU_FAMILIES=gfx1201 \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+```
+
+2. Build entire project (very time consuming)
+
+```
+cd /develop/therock-build && ninja
+```
+
+Configuring the project is often tricky. Rely on me to give you task specific instructions for configuration and incremental builds (or else you will initiate very long build time activities).
+
+#### Working on specific components
+
+Often we have to work on specific subsets of ROCm. We do this with -DTHEROCK_ENABLE_* flags as described in TheRock/README.md. Once the project is configured for the proper subset, it is typical to iterate by expunging and rebuilding a specific named project. Example:
+
+```
+cd /develop/therock-build
+ninja clr+expunge && ninja clr+dist
+```
+
 ### Source Navigation
 - Source code is across multiple repositories and worktrees
 - Git submodules are used extensively
