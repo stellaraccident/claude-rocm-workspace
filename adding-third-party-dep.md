@@ -104,6 +104,14 @@ Create `/develop/therock/third-party/<library>/CMakeLists.txt`:
 ```cmake
 # Section 1: Super-project integration (when included from TheRock)
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  # CRITICAL: Detect meson in super-project context where venv PATH is available
+  # The sub-project (Section 2) doesn't have access to the same environment,
+  # so tool detection MUST happen here and be passed through CMAKE_ARGS.
+  find_program(MESON_BUILD meson)
+  if(NOT MESON_BUILD)
+    message(FATAL_ERROR "Building <library> requires meson (install with: pip install meson)")
+  endif()
+
   # Fetch the source tarball
   set(_source_dir "${CMAKE_CURRENT_BINARY_DIR}/source")
   set(_download_stamp "${_source_dir}/download.stamp")
@@ -126,7 +134,7 @@ if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     OUTPUT_ON_FAILURE
     CMAKE_ARGS
       "-DSOURCE_DIR=${_source_dir}"
-      "-DMESON_BUILD=${MESON_BUILD}"
+      "-DMESON_BUILD=${MESON_BUILD}"  # Pass detected tool path to sub-project
       "-DPython3_EXECUTABLE=${Python3_EXECUTABLE}"
     INTERFACE_PKG_CONFIG_DIRS
       lib/pkgconfig
@@ -423,17 +431,19 @@ ninja <component>+expunge && ninja <component>+dist
 5. **Dual-mode CMakeLists.txt**: For meson libraries, guard super-project logic with `if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)`
 
 ### Meson-Specific
-6. **pkg-config, not CMake**: Use `INTERFACE_PKG_CONFIG_DIRS`, NOT `therock_cmake_subproject_provide_package()` for meson libraries
-7. **Critical meson flags**: Always use `--prefix "/"`, `-Dpkgconfig.relocatable=true`, `-Dlibdir=lib`
-8. **DESTDIR installation**: Use `DESTDIR=${CMAKE_INSTALL_PREFIX}` when calling `meson install`
-9. **Source directory location**: Meson refuses to build if source dir is a subdirectory of build dir (use PATCH_SOURCE_DIR)
-10. **Verification**: Always check that .pc file contains `prefix=${pcfiledir}/../..` for relocatability
-11. **Testing iterations**: Use `ninja <library>+expunge && ninja <library>` to fully rebuild from scratch
+6. **Tool detection in super-project**: CRITICAL - Detect meson using `find_program()` in Section 1 (super-project), NOT in Section 2 (sub-project). The sub-project CMake invocation doesn't have access to the same shell environment/PATH as the super-project. Always pass detected tools via CMAKE_ARGS.
+7. **Environment setup**: Before building, activate the venv: `source /develop/therock-venv/bin/activate`. This provides meson and other build tools. Without it, `find_program(meson)` will fail even though meson is in requirements.txt.
+8. **pkg-config, not CMake**: Use `INTERFACE_PKG_CONFIG_DIRS`, NOT `therock_cmake_subproject_provide_package()` for meson libraries
+9. **Critical meson flags**: Always use `--prefix "/"`, `-Dpkgconfig.relocatable=true`, `-Dlibdir=lib`
+10. **DESTDIR installation**: Use `DESTDIR=${CMAKE_INSTALL_PREFIX}` when calling `meson install`
+11. **Source directory location**: Meson refuses to build if source dir is a subdirectory of build dir (use PATCH_SOURCE_DIR)
+12. **Verification**: Always check that .pc file contains `prefix=${pcfiledir}/../..` for relocatability
+13. **Testing iterations**: Use `ninja <library>+expunge && ninja <library>` to fully rebuild from scratch
 
 ### Documentation
-12. **No absolute paths in docs**: Never use absolute paths like `/develop/therock` in documentation files
-13. **Avoid find_path**: Don't recommend `find_path()` for dependencies - it's fragile. Use `find_package()` or `pkg_check_modules()` only
-14. **List "none" for alternatives**: If there are no good alternatives, explicitly state `- Alternatives: none`
+14. **No absolute paths in docs**: Never use absolute paths like `/develop/therock` in documentation files
+15. **Avoid find_path**: Don't recommend `find_path()` for dependencies - it's fragile. Use `find_package()` or `pkg_check_modules()` only
+16. **List "none" for alternatives**: If there are no good alternatives, explicitly state `- Alternatives: none`
 
 ## Reference Files
 
