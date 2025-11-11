@@ -84,8 +84,56 @@ ninja clr+expunge && ninja clr+dist
 - [Note any non-standard build flags or requirements]
 
 ### Git Workflow
-- [Document branching strategy]
-- [Note how worktrees/submodules are used]
+
+#### Branch Naming
+Use the pattern: `users/<username>/<short-description>`
+
+Examples:
+- `users/stellaraccident/add-simde-third-party`
+- `users/stellaraccident/fix-cmake-detection`
+
+#### Creating a Branch and Committing
+```bash
+# Create and switch to a new branch
+cd /develop/therock
+git checkout -b users/stellaraccident/<description>
+
+# Stage changes
+git add <files>
+
+# Create commit with structured message and Claude Code footer
+git commit -m "$(cat <<'EOF'
+<Short summary line>
+
+<Detailed description of what changed and why>
+
+Changes:
+- Bullet point list of key changes
+- Another change
+
+Additional context or testing notes.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+
+# Verify commit
+git log -1 --stat
+```
+
+#### Commit Message Best Practices
+- First line: Short summary (50-72 chars)
+- Blank line after summary
+- Detailed description explaining what and why
+- Include "Changes:" section with bullet points for key modifications
+- Add testing/verification notes
+- Always include the Claude Code footer (emoji + link + Co-Authored-By)
+
+#### Submodules
+- Git submodules are used extensively
+- When editing build configs, check both source tree and build tree caches
 
 ### Tools
 - [List common tools: compilers, rocm-cmake, etc.]
@@ -94,8 +142,10 @@ ninja clr+expunge && ninja clr+dist
 
 - [ROCm Documentation](https://rocm.docs.amd.com/)
 - [TheRock repository](https://github.com/ROCm/TheRock)
+- [Adding Third-Party Dependencies](adding-third-party-dep.md) - Guide for integrating third-party libraries into TheRock
 - Internal wiki/docs: [add links]
 
 ## Notes
 
 [Add your ongoing notes, discoveries, and context here as you work]
+- Note that TheRock is a super-project. The builds under the submodules (like rocm-systems) are sub-projects. Since dependency management is handled by the super-project, you want to refer to those build rules. For example, in the case of ROCR-Runtime and clr, see the `core/CMakeLists.txt` file. This is documented in docs/development/build_system.md.
