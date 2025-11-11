@@ -1,0 +1,42 @@
+# ROCm Claude Workspace .gitignore
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# Build artifacts (if you ever test builds here)
+build/
+*.o
+*.a
+*.so
+
+# Logs
+*.log
+
+# Personal notes that shouldn't be shared
+personal-notes/
+scratch/
+
+# Environment-specific configs
+.env
+.env.local
+
+# Python cache (if you add Python scripts)
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files
+*.bak
+*.backup
+
+# OS files
+Thumbs.db
