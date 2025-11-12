@@ -255,6 +255,90 @@ objdump -T /path/to/xla_extension.so | grep -i llvm | grep -v '@'
 2. **Short-term**: Verify which shared libraries are affected
 3. **Long-term**: Investigate building LLVM with hidden visibility
 
+## Critical Bazel Failure Mode: Test Dynamic Linking
+
+### The Problem
+
+Bazel has a catastrophic default behavior: `cc_test` defaults to **dynamic linking** (unlike `cc_binary` which defaults to static). Combined with `--dynamic_mode=default` (the default), this converts ALL `cc_library` targets to shared libraries when building tests. This:
+
+1. **Destroys all visibility control** - Hidden symbols become public
+2. **Creates unversioned shared libraries** - Perfect for symbol interposition
+3. **Dumps everything into global namespace** - LLVM symbols everywhere
+4. **Makes symbols interpose with everything** - Including system libraries
+
+This "feature" was designed to speed up test iteration in Google's monorepo, but for everyone else with external dependencies like LLVM, it's been a source of torture for years.
+
+### The Symptom
+
+```bash
+# Building normally: works fine
+bazel build //...
+
+# Building tests: suddenly LLVM symbols are everywhere
+bazel test //...
+# Crashes with symbol interposition errors
+```
+
+### The Fix
+
+Add to your `.bazelrc` or command line:
+
+```bash
+# Disable Bazel's brain-damaged test dynamic linking
+build --dynamic_mode=off
+test --dynamic_mode=off
+```
+
+Or just for Linux (Windows already has this in XLA):
+```bash
+build:linux --dynamic_mode=off
+test:linux --dynamic_mode=off
+```
+
+Alternative: Force static linking in individual tests:
+```python
+cc_test(
+    name = "my_test",
+    linkstatic = True,  # Override dynamic default
+    # ... rest of rule
+)
+```
+
+### Why This Matters for LLVM
+
+When `--dynamic_mode=default` (the default) with `cc_test`:
+- **Every LLVM `cc_library` becomes a `.so` file** during test builds
+- **All carefully crafted visibility controls are ignored**
+- **60,000+ LLVM symbols flood the global namespace**
+- **These unversioned symbols interpose with ANY other LLVM in the process**
+- **Tests crash mysteriously with symbol version mismatches**
+
+With `--dynamic_mode=off`:
+- Libraries stay static as intended ("mostly static" mode)
+- Visibility controls work
+- Symbol interposition only happens where you explicitly created shared libraries
+
+### The Values of --dynamic_mode
+
+Per Bazel documentation:
+- **`default`**: Bazel chooses whether to link dynamically (usually does for tests)
+- **`off`**: All libraries linked in mostly static mode
+- **`fully`**: All libraries linked dynamically (even cc_binary)
+
+### Verification
+
+```bash
+# Check if your build is affected
+bazel test //some/test --subcommands 2>&1 | grep -E "\.so|\.dylib" | wc -l
+# If this shows many .so files being created, you're affected
+
+# With the fix
+bazel test //some/test --dynamic_mode=off --subcommands 2>&1 | grep -E "\.so|\.dylib" | wc -l
+# Should show far fewer (only intentional shared libraries)
+```
+
+**Note**: XLA already sets `--dynamic_mode=off` for Windows (see `tensorflow.bazelrc`), acknowledging this issue exists, but inexplicably leaves it on for Linux where it causes the most damage.
+
 ## References
 
 - Similar fix in llvmlite: https://github.com/numba/llvmlite/pull/1314
