@@ -1,0 +1,170 @@
+================================================================================
+ROCM KERNEL DATABASE STRUCTURES - EXECUTIVE SUMMARY
+================================================================================
+
+OVERVIEW:
+rocBLAS and hipBLASLt maintain large kernel database libraries organized by GPU
+architecture. These contain compiled GPU kernels (.co, .hsaco) and metadata files
+(.dat in MessagePack format).
+
+KEY FINDINGS:
+
+1. INSTALLED LOCATIONS
+   - hipBLASLt: /rocm/<arch>/lib/hipblaslt/library/
+   - rocBLAS: /rocm/<arch>/lib/rocblas/library/
+
+2. SIZE METRICS
+   hipBLASLt:
+     - gfx1100: 42 MB (304 files: 149 .co, 151 .dat, 4 .hsaco)
+     - gfx1201: 320 MB (590 files)
+   
+   rocBLAS:
+     - gfx1100: 84 MB (439 files: 80 .co, 138 .dat, 220 .hsaco)
+     - gfx1201: 21 MB
+
+3. FILE TYPES AND FORMATS
+   
+   HSACO Files (.hsaco):
+   - ELF 64-bit LSB shared objects (AMD GPU binary format)
+   - Size: 160 KB - 3.7 MB each
+   - Purpose: Compiled GPU kernel archives
+   - Example: Kernels.so-000-gfx1100.hsaco (3.7 MB in hipBLASLt)
+   
+   CO Files (.co):
+   - ELF 64-bit LSB shared objects (individual kernel objects)
+   - Size: 40 KB - 590 KB each
+   - Purpose: Specific kernel implementations
+   - Usually paired with .dat metadata files
+   - Example: extop_gfx1100.co (41 KB, extended operations)
+   
+   DAT Files (.dat):
+   - MessagePack binary serialization format
+   - Size: 4 KB - 610 KB each
+   - Purpose: Kernel metadata and configuration index
+   - Content: Architecture names, operation names, function names, work item
+     limits, paths to kernel files
+   - Supports lazy loading at runtime
+
+4. ARCHITECTURE SUPPORT
+   
+   hipBLASLt (source tree shows):
+   - aldebaran (CDNA 2), aquavanjaram (CDNA 3)
+   - gfx1150, gfx1200, gfx1201, gfx1103 (RDNA)
+   - gfx950 (RDNA 4), navi31/32/33 (RDNA 3)
+   
+   rocBLAS (installed):
+   - gfx1100, gfx1101, gfx1102, gfx1103 (RDNA 3 variants)
+
+5. NAMING CONVENTIONS
+   
+   All architecture-specific files follow pattern:
+   - <operation>_<arch>.ext
+   - TensileLibrary_<type>_<arch>.ext
+   
+   Example (hipBLASLt contraction):
+   TensileLibrary_BB_BB_HA_Bias_Aux_SAV_UA_Type_BB_HPA_Contraction_l_Ailk_Bjlk_Cijk_Dijk_gfx1100.co
+   
+   Components:
+   - BB_BB_HA = data types (bfloat16, bfloat16, half)
+   - Bias_Aux_SAV_UA = feature flags
+   - Type_BB_HPA = precision specification
+   - l_Ailk_Bjlk_Cijk_Dijk = memory layout configuration
+
+6. FILE PAIRING
+   
+   Most Tensile kernels stored as pairs:
+   - name.co (compiled kernel)
+   - name.dat (metadata index)
+   
+   Benefits:
+   - Lazy loading: metadata accessed first, kernels loaded on demand
+   - Runtime selection: .dat specifies kernel variants by parameter size
+   - Modularity: individual kernels can be replaced/updated
+
+7. CORE METADATA STRUCTURE (DAT FILES)
+   
+   Format: MessagePack binary
+   Structure example:
+   {
+     "gfx1100": {
+       "LayerNorm": [
+         {
+           "func_name": "LayerNorm_DT_S_W_256_C_4_S_1",
+           "io_type": "S",
+           "limit": 4096,
+           "num_workitems": 256,
+           "co_path": "extop_gfx1100.co"
+         }
+       ]
+     }
+   }
+
+8. ARCHITECTURE ISOLATION
+   
+   Key property: Architecture-specific kernels CANNOT be shared
+   - Each architecture has separate .co and .dat files
+   - HSACO files may be combined or separate per architecture
+   - Few truly shared files (e.g., hipblasltTransform.hsaco)
+   - Filenames contain architecture identifier (gfx1100, gfx1101, etc.)
+
+9. SIZE BREAKDOWN (hipBLASLt gfx1100)
+   
+   Kernels.so-000-gfx1100.hsaco      3.7 MB  (9%)
+   hipblasltTransform.hsaco           1.4 MB  (3%)
+   Tensile .dat files (151)          ~20 MB  (48%)
+   Tensile .co files (149)           ~18 MB  (43%)
+   Other metadata                    ~2 MB   (5%)
+   ────────────────────────────────────────
+   Total:                            42 MB
+
+10. SIZE BREAKDOWN (rocBLAS gfx1100)
+    
+    HSACO files (220)                ~75 MB  (89%)
+    DAT files (138)                  ~7 MB   (8%)
+    CO files (80)                    ~2 MB   (2%)
+    Lazy loading metadata            ~1 MB   (1%)
+    ────────────────────────────────────────
+    Total:                           84 MB
+
+IMPLICATIONS FOR KPACK SPLITTING:
+
+1. Separate kernel packages per architecture
+   - hipBLASLt: ~14 MB per architecture (42 MB / 3 archs)
+   - rocBLAS: ~21 MB per architecture (84 MB / 4 archs)
+
+2. Keep paired files together
+   - Always include .co with corresponding .dat
+   - Maintain cross-references in metadata
+
+3. Handle shared files separately
+   - hipblasltTransform.hsaco used across architectures
+   - hipblasltExtOpLibrary.dat can be shared
+
+4. Compression opportunities
+   - ELF binaries compress 40-50%
+   - hipBLASLt: 42 MB -> 21-25 MB compressed
+   - rocBLAS: 84 MB -> 42-50 MB compressed
+
+5. No file dependencies between architectures
+   - Clean separation enables selective unpacking
+   - Can ship only target architecture at installation
+
+PRACTICAL LOCATIONS:
+
+Installed (validated on system):
+- /home/stella/claude-rocm-workspace/rocm/gfx1100/lib/hipblaslt/library/
+- /home/stella/claude-rocm-workspace/rocm/gfx1100/lib/rocblas/library/
+- /home/stella/claude-rocm-workspace/rocm/gfx1201/lib/hipblaslt/library/
+- /home/stella/claude-rocm-workspace/rocm/gfx1201/lib/rocblas/library/
+
+Source trees:
+- /develop/therock/rocm-libraries/projects/hipblaslt/library/src/amd_detail/rocblaslt/src/Tensile/Logic/
+- /develop/therock/rocm-libraries/projects/rocblas/library/src/
+
+RECOMMENDED REFERENCES:
+
+1. kernel-databases.md - High-level overview with all key facts
+2. kernel-databases-technical-reference.md - Detailed technical specifications,
+   file format details, parsing examples, and kpack splitting strategy
+
+================================================================================

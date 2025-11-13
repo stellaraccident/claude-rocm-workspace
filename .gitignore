@@ -1,5 +1,7 @@
 # ROCm Claude Workspace .gitignore
 
+/rocm
+
 # Temporary files
 *.tmp
 *.swp

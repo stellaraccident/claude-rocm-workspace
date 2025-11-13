@@ -26,49 +26,99 @@ This provides flexibility in final assembly while keeping host code architecture
 
 Each architecture build produces artifacts that need splitting. The map phase processes these deterministically.
 
+### Types of Device Code
+
+The map phase handles two distinct types of device code:
+
+1. **Fat Binaries**: Executables and libraries with embedded `.hip_fatbin` sections containing device code for multiple architectures. These need kpack extraction and transformation.
+
+2. **Kernel Databases**: Pre-compiled kernel collections used by libraries like rocBLAS and hipBLASLt, stored as separate files:
+   - `.hsaco` files: Compiled GPU kernel archives (160 KB - 3.7 MB each)
+   - `.co` files: Individual kernel objects (40 KB - 590 KB each)
+   - `.dat` files: MessagePack metadata indexes for lazy loading
+
+   These files are already architecture-specific (e.g., `TensileLibrary_lazy_gfx1100.co`) and just need to be moved to the appropriate architecture artifact while preserving directory structure.
+
 ### Input
-- Artifact directory from build (e.g., `/develop/therock-build/artifacts/miopen_lib_gfx110X/`)
-- Contains mixed host and device code
+- Artifact directory from build (e.g., `/develop/therock-build/artifacts/rocblas_lib_gfx110X/`)
+- Contains `artifact_manifest.txt` listing prefix directories
+- Each prefix contains mixed host and device code
 
 ### Process
-1. Scan artifact directory for bundled binaries
-2. Extract device code from each binary
-3. Auto-detect ISAs present in the binary
-4. Generate one kpack file per ISA
-5. Modify host binaries to reference relative manifest path
-6. Preserve directory structure from artifact
+1. Read `artifact_manifest.txt` to identify prefix directories
+2. For each prefix directory:
+   - **For fat binaries** (e.g., in `bin/`, `lib/`):
+     - Extract device code from `.hip_fatbin` sections
+     - Auto-detect ISAs present in the binary
+     - Generate one kpack file per ISA
+     - Modify host binaries to reference kpack manifest path
+   - **For kernel databases** (e.g., `lib/rocblas/library/`, `lib/hipblaslt/library/`):
+     - Identify architecture-specific kernel files (.hsaco, .co, .dat)
+     - Move to corresponding architecture artifact based on filename suffix
+     - Preserve directory structure for database compatibility
+3. Create kpack artifact directories following TheRock conventions
+4. Generate kpack manifest (`.kpm` file) for this shard
 
 ### Output Structure
 ```
 map-output/
-├── miopen_lib_generic/
+├── rocblas_lib_generic/
+│   ├── artifact_manifest.txt  # Preserved from input
+│   └── {prefix}/
+│       ├── .kpack/
+│       │   └── rocblas_lib.kpm # Manifest for this component
+│       ├── lib/
+│       │   ├── librocblas.so  # Modified with .rocm_kpack_manifest marker
+│       │   └── rocblas/
+│       │       └── library/    # Kernel database directory (now empty)
+│       └── bin/
+│           └── rocblas-bench  # Modified with .rocm_kpack_manifest marker
+├── rocblas_lib_gfx1100/
 │   ├── artifact_manifest.txt
-│   ├── {preserved-structure}/
-│   │   └── bin/
-│   │       └── binary1  # Modified with .rocm_kpack_manifest marker
-│   └── kpack.manifest   # JSON manifest listing available kpacks
-├── miopen_lib_gfx1100.kpack
-├── miopen_lib_gfx1101.kpack
-└── miopen_lib_gfx1102.kpack
+│   └── {prefix}/
+│       ├── .kpack/
+│       │   └── rocblas_lib_gfx1100.kpack  # From fat binaries
+│       └── lib/
+│           └── rocblas/
+│               └── library/
+│                   ├── TensileLibrary_lazy_gfx1100.dat
+│                   ├── TensileLibrary_lazy_gfx1100.co
+│                   └── *.hsaco  # Other gfx1100 kernel files
+├── rocblas_lib_gfx1101/
+│   ├── artifact_manifest.txt
+│   └── {prefix}/
+│       ├── .kpack/
+│       │   └── rocblas_lib_gfx1101.kpack
+│       └── lib/
+│           └── rocblas/
+│               └── library/
+│                   ├── TensileLibrary_lazy_gfx1101.dat
+│                   └── TensileLibrary_lazy_gfx1101.co
+└── rocblas_lib_gfx1102/
+    └── [similar structure]
 ```
 
-### Manifest Format
-```json
+Note: Kernel database files (.hsaco, .co, .dat) are moved to architecture-specific artifacts while preserving their directory structure. Fat binaries have their device code extracted into .kpack files.
+
+### Manifest Format (.kpm)
+Using MessagePack format for efficient runtime parsing:
+```python
+# Conceptual structure (actual format is binary MessagePack)
 {
-  "version": "1.0",
-  "group": "miopen",
-  "kpack_files": [
-    {
-      "architecture": "gfx1100",
-      "path": "../miopen_lib_gfx1100.kpack",
-      "checksum": "sha256:..."
-    },
-    {
-      "architecture": "gfx1101",
-      "path": "../miopen_lib_gfx1101.kpack",
-      "checksum": "sha256:..."
-    }
-  ]
+    "version": 1,
+    "component": "miopen_lib",
+    "kpack_files": [
+        {
+            "architecture": "gfx1100",
+            "filename": "miopen_lib_gfx1100.kpack",  # Always in same .kpack/ directory
+            "checksum": b"..."  # SHA256 as bytes
+        },
+        {
+            "architecture": "gfx1101",
+            "filename": "miopen_lib_gfx1101.kpack",
+            "checksum": b"..."
+        }
+    ]
 }
 ```
 
@@ -81,6 +131,9 @@ The reduce phase combines artifacts from all map phases according to packaging t
 - Configuration file defining packaging topology
 
 ### Configuration Schema
+
+Architecture grouping is driven by configuration rather than automatic detection. While consecutive architecture numbers often indicate SKU variants within the same IP generation (e.g., gfx1100, gfx1101, gfx1102), there are exceptions and edge cases that make automatic grouping unreliable. The mapping between build topology and packaging topology is therefore explicitly defined in a configuration file.
+
 ```yaml
 version: 1.0
 
@@ -89,15 +142,15 @@ primary_generic_source: gfx110X
 
 # Architecture grouping for packages
 architecture_groups:
-  gfx11-desktop:
-    display_name: "Desktop Graphics (gfx11)"
+  gfx110X:
+    display_name: "ROCm gfx110X"
     architectures:
       - gfx1100
       - gfx1101
       - gfx1102
 
-  gfx11-datacenter:
-    display_name: "Data Center (gfx11)"
+  gfx115X:
+    display_name: "ROCm gfx115X"
     architectures:
       - gfx1150
       - gfx1151
@@ -116,28 +169,34 @@ validation:
 ```
 
 ### Process
-1. Copy generic artifacts from primary source
-2. Collect kpack files according to architecture groups
-3. Update manifest files to reflect final kpack locations
+1. Download and flatten generic artifacts from primary source
+2. Download and flatten kpack artifact directories according to architecture groups
+3. Update/merge kpack manifests (`.kpm` files) to reflect complete distribution
 4. Organize into package-ready directory structure
 
 ### Output Structure
 ```
 package-staging/
-├── gfx11-desktop/
-│   ├── {generic-artifact-structure}/
-│   ├── .kpack/
-│   │   ├── miopen_lib_gfx1100.kpack
-│   │   ├── miopen_lib_gfx1101.kpack
-│   │   └── miopen_lib_gfx1102.kpack
-│   └── kpack.manifest  # Updated with final paths
-└── gfx11-datacenter/
-    ├── {generic-artifact-structure}/
-    ├── .kpack/
-    │   ├── miopen_lib_gfx1150.kpack
-    │   └── miopen_lib_gfx1151.kpack
-    └── kpack.manifest
+├── gfx110X/
+│   ├── {flattened-generic-prefixes}/
+│   │   ├── .kpack/
+│   │   │   ├── miopen_lib.kpm         # Updated manifest for full distribution
+│   │   │   ├── miopen_lib_gfx1100.kpack
+│   │   │   ├── miopen_lib_gfx1101.kpack
+│   │   │   └── miopen_lib_gfx1102.kpack
+│   │   └── bin/
+│   │       └── binary1                # Still references miopen_lib.kpm
+└── gfx115X/
+    ├── {flattened-generic-prefixes}/
+    │   ├── .kpack/
+    │   │   ├── miopen_lib.kpm         # Different manifest for this package
+    │   │   ├── miopen_lib_gfx1150.kpack
+    │   │   └── miopen_lib_gfx1151.kpack
+    │   └── bin/
+    │       └── binary1
 ```
+
+Note: Each build shard remains independently usable - its `.kpm` file references only the kpack files from that shard. The reduce phase creates comprehensive `.kpm` files for the complete distribution.
 
 ## Implementation Components
 
@@ -157,12 +216,14 @@ package-staging/
 
 1. **`ElfOffloadKpacker`** - Add manifest reference injection
    - Instead of `.rocm_kpack_ref` with direct kpack paths
-   - Inject `.rocm_kpack_manifest` with relative manifest path
+   - Inject `.rocm_kpack_manifest` with path to `.kpm` file
+   - Path format: `.kpack/{name}_{component}.kpm`
 
 2. **Runtime (future)** - Manifest-aware kpack loading
    - Read manifest path from binary
-   - Load manifest JSON
-   - Locate and load appropriate kpack files
+   - Parse MessagePack manifest
+   - Load kpack files from same `.kpack/` directory
+   - Handle architecture fallback logic
 
 ## Integration with TheRock
 
@@ -176,8 +237,9 @@ package-staging/
 
 ### Artifact Naming Convention
 Following TheRock's pattern:
-- Generic: `{name}_{component}_generic/`
-- Device: `{name}_{component}_gfx{arch}.kpack`
+- Generic: `{name}_{component}_generic/` (host-only binaries with manifest references)
+- Device: `{name}_{component}_gfx{arch}/` (architecture-specific kpack files)
+- Manifest: `{name}_{component}.kpm` (always in `.kpack/` directory)
 
 ## Advantages of This Approach
 
@@ -189,15 +251,13 @@ Following TheRock's pattern:
 
 ## Open Questions
 
-1. **Manifest Location**: Where should the manifest file be placed relative to binaries?
-   - Option A: Fixed location like `../kpack.manifest`
-   - Option B: Configurable per component
-   - Option C: Search path with fallbacks
+1. **Manifest Path Resolution**: How should binaries find their `.kpm` file?
+   - RESOLVED: Fixed path `.kpack/{name}_{component}.kpm` relative to binary location
+   - Need to handle different installation depths (e.g., `/usr/bin/` vs `/usr/lib/rocm/bin/`)
 
-2. **Kpack Directory Structure**: Where do kpack files live in final layout?
-   - Option A: Single `.kpack/` directory at distribution root
-   - Option B: Per-component `.kpack/` directories
-   - Option C: Configurable via manifest
+2. **Artifact Tarball Compression**: What compression for kpack artifact tarballs?
+   - RESOLVED: Low/no compression since kpack files are already compressed
+   - Need to configure in TheRock CI
 
 3. **Validation Strategy**: What checks should reduce phase perform?
    - Required: No duplicate device code per architecture
