@@ -372,9 +372,11 @@ Note: Fallback rules are GPU-family specific and encoded in the runtime, not the
 
 The runtime integration happens at these points:
 
-1. **HIP Runtime (CLR)**:
+1. **HIP Runtime (CLR or comgr - TBD)**:
    - `__hipRegisterFatBinary()`: Detects HIPK magic, triggers manifest lookup
    - `digestFatBinary()`: Lazy loads kernels from kpack as needed
+
+   Note: Whether to integrate into CLR or comgr is to be decided later. The examples here assume CLR but this decision is not critical to the overall design.
 
 2. **Kernel Libraries**:
    - rocBLAS: No change needed - kernel database files are moved as-is
