@@ -1,4 +1,4 @@
-# Example Task Template
+# Transform from monolithic to sharded TheRock build
 
 **Status:** Not started
 **Priority:** P0 (Critical)
