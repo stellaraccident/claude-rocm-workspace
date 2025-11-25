@@ -685,6 +685,28 @@ The unified feature system is production-ready with:
 - THEROCK_ENABLE_HIP_RUNTIME=ON: ✅ Pulls in correct dependencies
 - Platform-specific builds: ✅ Tested (Windows simulation)
 
-**CI Status:** 🔄 Currently running validation
+**CI Status:** 🔄 Currently running validation (pushed 2025-11-22)
+
+### Recent Updates (2025-11-22)
+
+**Successfully Rebased on Main:**
+- Resolved conflicts with new ROCPROFSYS (rocprofiler-systems) feature
+- Added `profiler-apps` artifact group for profiler applications
+- Created new build stage for profiler applications
+- Total artifacts: 26 (added rocprofiler-systems)
+
+**Windows Test Fix:**
+- Fixed file locking issue in unit tests by properly closing temp file handles
+- Tests now pass on Windows CI
+
+**Architecture Refinements:**
+- Separated profiler infrastructure (`profiler-core`) from applications (`profiler-apps`)
+- rocprofiler-sdk: Core infrastructure for annotations/tracing
+- rocprofiler-systems: Application-level profiling tool
+
+**Manual Features Preserved:**
+- ROCPROF_TRACE_DECODER_BINARY: Configuration option for closed-source decoder
+- SPARSE: Sub-feature controlling sparse libraries within BLAS artifact
+- SOLVER: Sub-feature controlling solver libraries within BLAS artifact
 
 Keep progress and design notes updated here so that we can keep working on the task across multiple sessions.
