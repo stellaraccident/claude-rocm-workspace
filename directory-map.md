@@ -6,12 +6,7 @@ This document maps out where all ROCm-related directories live on this system.
 
 ## Environment Setup
 
-**IMPORTANT:** Before working with TheRock, activate the project venv:
-```bash
-source /develop/therock-venv/bin/activate
-```
-
-This venv contains required build tools including:
+**Python Environment:** Claude Code is launched with the project venv already active (symlinked as `venv/` in this workspace). This venv contains required build tools including:
 - meson (for building simde, libdrm, and other meson-based dependencies)
 - Other Python dependencies from requirements.txt
 

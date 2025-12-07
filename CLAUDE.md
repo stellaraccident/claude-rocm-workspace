@@ -12,6 +12,8 @@ Project repository: https://github.com/ROCm/TheRock
 
 This is a meta-workspace. Actual source and build directories are scattered across the filesystem and referenced by absolute paths.
 
+**Python Environment:** Claude Code is launched with the project venv already active (symlinked as `venv/` in this workspace).
+
 ## Project Context
 
 ### What is ROCm?
