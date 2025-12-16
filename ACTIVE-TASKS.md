@@ -8,7 +8,6 @@ This file tracks current and background tasks. Update it as you start new work o
 **[cmake-refactor](tasks/active/cmake-refactor.md)** - Priority 1
 Refactoring the CMake build system for better modularity
 -->
-**[ci-pipeline-shard](tasks/active/ci-pipeline-shard.md)** - Enable build sharding of TheRock pipelines
 
 ## Background Tasks
 
